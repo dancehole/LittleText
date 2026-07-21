@@ -1,28 +1,9 @@
 /**
- * 一个包含很多宫格记事本的面板
- * 内部封装对本地数据的操作和修改
- * ┌──────────────────────┐
- * │                      │
- * │ ┌────┐ ┌────┐ ┌────┐ │
- * │ │    │ │    │ │    │ │
- * │ │    │ │    │ │    │ │
- * │ └────┘ └────┘ └────┘ │
- * │                      │
- * │ ┌────┐ ┌────┐ ┌────┐ │
- * │ │    │ │    │ │    │ │
- * │ │    │ │    │ │    │ │
- * │ └────┘ └────┘ └────┘ │
- * │                      │
- * └──────────────────────┘
+ * 主工作区：一个或多个宫格 textarea 组成的面板。
+ * 负责数据读写、今日高亮、移动端自适应高度与三层布局适配。
  */
 class ComponentTextareaContainer {
-  /**
-   * @param {string} title
-   * @param {number} width
-   * @param {number} height
-   * @param {string} type
-   */
-  constructor(title, width, height, type="UNKNOW") {
+  constructor(title, width, height, type = "UNKNOW") {
     this.title = title;
     this.width = width;
     this.height = height;
@@ -30,37 +11,71 @@ class ComponentTextareaContainer {
     this.createTime = new Date();
   }
 
-  /**
-   * 判断面板是否重复了，在创建的时候调用
-   * @param {string} title
-   */
-  static isRepeat(title) {
-    const panelList = JSON_STORAGE.get("panelList");
-    return panelList.includes(title);
-  }
-
   static init() {
     this.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
   }
 
-  /**
-   * 新生成一个到缓存数据中
-   * @param {array[string]} defaultContent 默认填充的内容长度需要自觉保证
-   */
+  /** 是否处于移动端/平板端（≤ 1024px），桌面端才用原始宫格 */
+  static isMobile() {
+    return window.matchMedia("(max-width: 1024px)").matches;
+  }
+
+  /** 让 textarea 高度自适应内容（移动端单列/双列） */
+  static autoSizeTextarea(node) {
+    node.style.height = "auto";
+    node.style.height = node.scrollHeight + "px";
+  }
+
+  /** 根据设备类型重算所有 textarea 高度（resize / 布局切换时） */
+  static refreshAutoSize() {
+    const nodes = document.querySelectorAll("#workspace .cell");
+    if (this.isMobile()) {
+      nodes.forEach((n) => this.autoSizeTextarea(n));
+    } else {
+      nodes.forEach((n) => (n.style.height = ""));
+    }
+  }
+
+  static isRepeat(title) {
+    return (JSON_STORAGE.get("panelList") || []).includes(title);
+  }
+
+  static refreshDomByPanelName(panelName) {
+    this.fromCache(panelName).refreshTextArea();
+  }
+
+  static fromCache(title) {
+    const panelList = JSON_STORAGE.get("panelList") || [];
+    if (!panelList.includes(title)) {
+      return new ComponentTextareaContainer(title, 3, 2, "CLASSICS");
+    }
+    const obj = JSON_STORAGE.get(`${title}-data`);
+    if (obj === null) {
+      const res = new ComponentTextareaContainer(title, 3, 2, "CLASSICS");
+      res.createTime = new Date();
+      JSON_STORAGE.set(`${title}-data`, {
+        width: 3,
+        height: 2,
+        type: "CLASSICS",
+        createTime: res.createTime.getTime(),
+      });
+      return res;
+    }
+    const res = new ComponentTextareaContainer(title, obj.width, obj.height, obj.type);
+    res.createTime = new Date(obj.createTime);
+    return res;
+  }
+
   create(defaultContent) {
-    const panelList = JSON_STORAGE.get("panelList");
-    // 更新数据
+    const panelList = JSON_STORAGE.get("panelList") || [];
     panelList.push(this.title);
     JSON_STORAGE.set("panelList", panelList);
-    // 详细信息
     JSON_STORAGE.set(`${this.title}-data`, {
       width: this.width,
       height: this.height,
       type: this.type,
-      createTime: this.createTime.getTime()
+      createTime: this.createTime.getTime(),
     });
-
-    // 宫格信息
     for (let i = 0; i < this.width * this.height; i++) {
       JSON_STORAGE.set(
         `${this.title}-text-${i}`,
@@ -69,187 +84,91 @@ class ComponentTextareaContainer {
     }
   }
 
-  /**
-   * 删除这个面板，清除存储数据信息
-   */
   delete() {
     if (this.title === "default") {
-      alert("default不能删除");
+      Toast.show("default 不能删除", "warning");
       return;
     }
-    const panelList = JSON_STORAGE.get("panelList");
-    const idxRemove = panelList.indexOf(this.title);
-    if (idxRemove === -1) {
-      alert("已经不存在了");
-      return;
-    }
-    panelList.splice(idxRemove, 1);
+    const panelList = JSON_STORAGE.get("panelList") || [];
+    const idx = panelList.indexOf(this.title);
+    if (idx === -1) return;
+    panelList.splice(idx, 1);
     JSON_STORAGE.set("panelList", panelList);
-    // 清空对应的信息
     for (let i = 0; i < this.width * this.height; i++) {
       JSON_STORAGE.delete(`${this.title}-text-${i}`);
     }
     JSON_STORAGE.delete(`${this.title}-data`);
   }
 
-  /**
-   * 根据面板名称刷新右侧区域
-   * @param panelName {string}
-   */
-  static refreshDomByPanelName(panelName) {
-    this.fromCache(panelName).refreshTextArea();
-  }
-
-  /**
-   * 从localStorage中解析出这个对象来
-   * 例如 panelList: "[{title: "xxx", width: 3, height: 6, createTime: 147777}]"
-   * 传入的参数是将字符串解析后的json
-   * {title: "xxx", width: 3, height: 6, createTime: 147777}
-   */
-  static fromCache(title) {
-    if (!title) {
-      console.warn(`格式不对${title}`);
-    }
-    const panelList = JSON_STORAGE.get("panelList");
-    if (!panelList.includes(title)) {
-      console.warn(`没从缓存中找到${title}的面板`);
-      let res = new ComponentTextareaContainer(title, 3, 2, "CLASSICS");
-      res.createTime = new Date();
-      return res;
-    }
-
-    const obj = JSON_STORAGE.get(`${title}-data`);
-    if (obj === null) {
-      // 说明是老版本，经典六宫格
-      let res = new ComponentTextareaContainer(title, 3, 2, "CLASSICS");
-      res.createTime = new Date();
-      // 顺手更新一下date数据
-      JSON_STORAGE.set(`${title}-data`, {
-        width: 3,
-        height: 2,
-        type: "CLASSICS",
-        createTime: res.createTime.getTime()
-      });
-      return res;
-    } else {
-      // 新版本
-      let res = new ComponentTextareaContainer(title, obj.width, obj.height, obj.type);
-      res.createTime = new Date(obj.createTime);
-      return res;
-    }
-  }
-
-  /**
-   * 根据当前对象，更新右侧面板，用于切换面板的时候。
-   */
   refreshTextArea() {
-    const mainEle = document.querySelector("main");
+    const mainEle = document.getElementById("workspace");
     mainEle.innerHTML = "";
 
-    // 获取当前日期信息
     const now = new Date();
     const currentDay = now.getDate();
     const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    let daysOfWeek = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-    let nameOfMonth = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
-    const todayIs = daysOfWeek[now.getDay()];
-    const currentMonthIs = nameOfMonth[currentMonth]
+    const todayIs = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][now.getDay()];
+    const monthName = [
+      "一月", "二月", "三月", "四月", "五月", "六月",
+      "七月", "八月", "九月", "十月", "十一月", "十二月",
+    ][currentMonth];
 
-    // 修改main的布局分布
-    mainEle.style.gridTemplateColumns = `repeat(${this.width}, 1fr)`;
-    mainEle.style.gridTemplateRows = `repeat(${this.height}, auto)`;
-    for (let i = 0; i < this.width * this.height; i++) {
-      let textarea = document.createElement("textarea");
-      textarea.className = `p-1 bg-transparent text-stone-100 leading-6 ring ring-inset ring-stone-700 focus:bg-stone-900 ring-1 outline-0 resize-none transition`;
-      const textareaValue = JSON_STORAGE.get(`${this.title}-text-${i}`);
-      if (textareaValue === null) {
-        textarea.value = "";
-      } else {
-        textarea.value = textareaValue;
-      }
-
-      // 高亮对应日期宫格的边框
-      if (this.type === "WEEK") {
-        // 周宫格，检查是否是今天
-        const dayName = textarea.value.split("\n")[0];
-        if (dayName === todayIs) {
-          textarea.className = `p-1 bg-transparent text-yellow-200 leading-6 ring ring-inset ring-stone-700 focus:bg-stone-900 ring-1 outline-0 resize-none transition`;
-        }
-      } else if (this.type === "MOON") {
-        // 月宫格，检查日期
-        const dateStr = textarea.value.split("\n")[0].split(" ")[0];
-        if (dateStr === `${currentMonth + 1}月${currentDay}日`) {
-          textarea.className = `p-1 bg-transparent text-yellow-200 leading-6 ring ring-inset ring-stone-700 focus:bg-stone-900 ring-1 outline-0 resize-none transition`;
-        }
-      } else if (this.type === "YEAR") {
-        // 年宫格，检查月份
-        const monthName = textarea.value.split("\n")[0];
-        if (monthName === currentMonthIs) {
-          textarea.className = `p-1 bg-transparent text-yellow-200 leading-6 ring ring-inset ring-stone-700 focus:bg-stone-900 ring-1 outline-0 resize-none transition`;
-        }
-      }
-
-
-      // 阻止tab键切换焦点，用chatGPT写的
-      textarea.onkeydown = function(event) {
-        // 检查按下的键是否是Tab键
-        if (event.key === "Tab") {
-          // 阻止默认行为
-          event.preventDefault();
-
-          // 插入制表符（\t）
-          const start = this.selectionStart;
-          const end = this.selectionEnd;
-          const value = this.value;
-
-          // 在光标位置插入制表符
-          this.value = value.substring(0, start) + "\t" + value.substring(end);
-
-          // 移动光标到插入制表符后
-          this.setSelectionRange(start + 1, start + 1);
-        }
-      };
-
-      textarea.oninput = (e) => {
-        JSON_STORAGE.set(`${this.title}-text-${i}`, e.target.value);
-      };
-      mainEle.appendChild(textarea);
+    // 桌面端使用 CSS grid 模板；移动/平板由 CSS 控制布局
+    if (!ComponentTextareaContainer.isMobile()) {
+      mainEle.style.gridTemplateColumns = `repeat(${this.width}, 1fr)`;
+      mainEle.style.gridTemplateRows = `repeat(${this.height}, auto)`;
+    } else {
+      mainEle.style.gridTemplateColumns = "";
+      mainEle.style.gridTemplateRows = "";
     }
-  }
 
-  /**
-   * 更改其中一个宫格内容所触发的信息改变
-   * @param {{x: number, y: number}} param0 发生更改的位置
-   */
-  onchange({ x, y }, newText) {
-    JSON_STORAGE.set(
-      `${this.title}-text-${this.locationToIndex({ x, y })}`,
-      newText
-    );
-  }
+    const total = this.width * this.height;
+    for (let i = 0; i < total; i++) {
+      const cell = document.createElement("textarea");
+      cell.className = "cell";
+      cell.placeholder = "记点什么…";
+      const value = JSON_STORAGE.get(`${this.title}-text-${i}`);
+      cell.value = value === null ? "" : value;
 
-  /**
-   * 之所以用静态方法，是因为当成工具函数使用。
-   * [0][1][2]
-   * [3][4][5]
-   *
-   * height: 2
-   * width: 3
-   *
-   * 5 --> {x: 2, y: 1}
-   */
-  static indexToLocation(index, width) {
-    return {
-      x: index % width,
-      y: Math.floor(index / width)
-    };
-  }
+      // 今日高亮
+      if (this.type === "WEEK") {
+        if (cell.value.split("\n")[0] === todayIs) cell.classList.add("is-today");
+      } else if (this.type === "MOON") {
+        const dateStr = cell.value.split("\n")[0].split(" ")[0];
+        if (dateStr === `${currentMonth + 1}月${currentDay}日`) cell.classList.add("is-today");
+      } else if (this.type === "YEAR") {
+        if (cell.value.split("\n")[0] === monthName) cell.classList.add("is-today");
+      }
 
-  /**
-   * 与上面的方法相反
-   */
-  static locationToIndex({ x, y }, width) {
-    return y * width + x;
+      // Tab 键插入制表符
+      cell.addEventListener("keydown", (e) => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const s = this.selectionStart;
+          const en = this.selectionEnd;
+          this.value = this.value.slice(0, s) + "\t" + this.value.slice(en);
+          this.setSelectionRange(s + 1, s + 1);
+        }
+      });
+
+      // 输入即存 + 移动端实时自适应
+      cell.addEventListener("input", (e) => {
+        JSON_STORAGE.set(`${this.title}-text-${i}`, e.target.value);
+        if (ComponentTextareaContainer.isMobile()) {
+          ComponentTextareaContainer.autoSizeTextarea(e.target);
+        }
+        EventBus.emit("cell:change", { panel: this.title, index: i });
+      });
+
+      mainEle.appendChild(cell);
+    }
+
+    if (ComponentTextareaContainer.isMobile()) {
+      requestAnimationFrame(() => {
+        mainEle
+          .querySelectorAll(".cell")
+          .forEach((n) => ComponentTextareaContainer.autoSizeTextarea(n));
+      });
+    }
   }
 }

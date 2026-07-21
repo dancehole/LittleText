@@ -1,127 +1,133 @@
-window.onload = function() {
-  
-  // 初始化缓存，防止一些key没有
+/**
+ * 应用入口：初始化各模块并接线。
+ */
+window.onload = function () {
+  // 初始化缓存，防止缺键
   initStorage();
 
-  // 刷新缓存剩余量 1分钟刷新一次
+  // 缓存用量定时刷新
   refreshCurrentCacheSize();
-  setInterval(() => {
-    refreshCurrentCacheSize();
-  }, 1000 * 60);
+  setInterval(refreshCurrentCacheSize, 1000 * 60);
 
-  // 所有组件初始化逻辑绑定
-  NAV_LIST.init();
+  // 各组件初始化
+  NAV_LIST.refresh();
   ComponentTextareaContainer.init();
   GLOBAL_SETTINGS_PANEL.init();
   DIALOG_ADD_PANEL.init();
 
-  // 刷新时间轴渲染状态
-  const lockTimeBox = document.querySelector("#lock-time-box");
-  if (GLOBAL_DATA.lock) {
-    lockTimeBox.classList.remove("hidden");
-  }
-
-  // 定时检测锁状态
-  setInterval(() => {
-    // 开启了保护功能 并且现在还没有锁住
-    if (GLOBAL_DATA.lock && !GLOBAL_DATA.isLockCurrent) {
-      // 判断是不是要锁住了
-      if (GLOBAL_DATA.lockTimeCurrent >= GLOBAL_DATA.lockTimeMax) {
-        GLOBAL_DATA.update("isLockCurrent", true);  // 锁住
-        GLOBAL_DATA.update("previousPannel", GLOBAL_DATA.currentPanel);
-        GLOBAL_DATA.update("currentPanel", "default");
-        NAV_LIST.refreshDom();
-        ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
-      } else {
-        // 时间步进
-        GLOBAL_DATA.update("lockTimeCurrent", GLOBAL_DATA.lockTimeCurrent + 1);
-      }
-      // 更新渲染
-      const lockTimeBar = document.querySelector("#lock-time-bar");
-      lockTimeBar.style.width = `${GLOBAL_DATA.lockTimeCurrent * 100 / GLOBAL_DATA.lockTimeMax}%`;
-    }
-  }, 1000);
-
-  // 按键和鼠标移动来清空时间
-  const throttledClearTime = throttle(() => {
-    // 开启了保护功能并且现在还没有锁住
-    if (GLOBAL_DATA.lock && !GLOBAL_DATA.isLockCurrent) {
-      GLOBAL_DATA.update("lockTimeCurrent", 0);
-    }
-  }, 1000);
-  document.addEventListener("mousemove", throttledClearTime);
-  document.addEventListener("keydown", throttledClearTime);
-
-  // 隐私保护锁解锁
-  document.addEventListener("keydown", function(event) {
-    const isCtrlPressed = event.ctrlKey || event.metaKey;
-    const isQKeyPressed = event.key === "Q" || event.key === "q";
-    if (isCtrlPressed && isQKeyPressed) {
-      GLOBAL_DATA.update("isLockCurrent", false);
-      GLOBAL_DATA.update("lockTimeCurrent", 0);
-      // 恢复被锁之前的Panel
-      GLOBAL_DATA.update("currentPanel", GLOBAL_DATA.previousPannel);
-      NAV_LIST.refreshDom();
-      ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
-    }
+  // 新建面板按钮
+  document.getElementById("add-panel-btn").addEventListener("click", () =>
+    DIALOG_ADD_PANEL.open()
+  );
+  // 全局设置按钮
+  document.getElementById("global-setting-btn").addEventListener("click", () => {
+    GLOBAL_SETTINGS_PANEL.populate();
+    Modal.get("global-settings-panel").open();
   });
 
-   // 初始化 lastDate
-  if (!(GLOBAL_DATA.lastDate)) {
-    GLOBAL_DATA.update("lastDate", new Date().toISOString().slice(0, 10)); // 获取当前日期（YYYY-MM-DD）
-  }
+  // 隐私锁初始态
+  const lockTimeBox = document.getElementById("lock-bar");
+  if (GLOBAL_DATA.lock) lockTimeBox.classList.add("is-on");
 
-  // 定时检查日期更新，使得跨过零点也不影响日期高亮
+  // 锁定时长推进
   setInterval(() => {
-    checkDateUpdate();
-  }, 1000 * 60); // 每分钟检查一次
+    if (GLOBAL_DATA.lock && !GLOBAL_DATA.isLockCurrent) {
+      if (GLOBAL_DATA.lockTimeCurrent >= GLOBAL_DATA.lockTimeMax) {
+        GLOBAL_DATA.update("isLockCurrent", true);
+        GLOBAL_DATA.update("previousPannel", GLOBAL_DATA.currentPanel);
+        GLOBAL_DATA.update("currentPanel", "default");
+        NAV_LIST.refresh();
+        ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
+        Toast.show("已进入隐私保护", "info");
+      } else {
+        GLOBAL_DATA.update("lockTimeCurrent", GLOBAL_DATA.lockTimeCurrent + 1);
+      }
+      GLOBAL_SETTINGS_PANEL.setLockProgress(
+        GLOBAL_DATA.lockTimeCurrent / GLOBAL_DATA.lockTimeMax
+      );
+    }
+  }, 1000);
+
+  // 鼠标/键盘活动清空计时
+  const clearTime = throttle(() => {
+    if (GLOBAL_DATA.lock && !GLOBAL_DATA.isLockCurrent) {
+      GLOBAL_DATA.update("lockTimeCurrent", 0);
+      GLOBAL_SETTINGS_PANEL.setLockProgress(0);
+    }
+  }, 1000);
+  document.addEventListener("mousemove", clearTime);
+  document.addEventListener("keydown", clearTime);
+
+  // Ctrl/⌘ + Q 解除隐私锁
+  document.addEventListener("keydown", (e) => {
+    const qPressed = e.code === "KeyQ" && (e.ctrlKey || e.metaKey);
+    if (!qPressed) return;
+    if (!GLOBAL_DATA.isLockCurrent) return;
+    GLOBAL_DATA.update("isLockCurrent", false);
+    GLOBAL_DATA.update("lockTimeCurrent", 0);
+    GLOBAL_SETTINGS_PANEL.setLockProgress(0);
+    GLOBAL_DATA.update("currentPanel", GLOBAL_DATA.previousPannel);
+    NAV_LIST.refresh();
+    ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
+    Toast.show("已解除隐私保护", "info");
+  });
+
+  // 窗口尺寸变化重算 textarea 高度
+  window.addEventListener(
+    "resize",
+    throttle(() => ComponentTextareaContainer.refreshAutoSize(), 200)
+  );
+
+  // 自动云同步：开启后，编辑（cell:change）防抖上传到云端
+  let _autoSyncTimer = null;
+  EventBus.on("cell:change", () => {
+    if (!CloudSync.getConfig().auto) return;
+    clearTimeout(_autoSyncTimer);
+    _autoSyncTimer = setTimeout(() => {
+      CloudSync.push().then((r) => {
+        if (r.ok) Toast.show("已自动同步到云端", "success");
+        else Toast.show("自动同步失败：" + r.error, "error");
+      });
+    }, 1500);
+  });
+
+  // 日期跨天自动刷新今日高亮
+  if (!GLOBAL_DATA.lastDate) {
+    GLOBAL_DATA.update("lastDate", new Date().toISOString().slice(0, 10));
+  }
+  setInterval(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (GLOBAL_DATA.lastDate !== today) {
+      GLOBAL_DATA.update("lastDate", today);
+      ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
+    }
+  }, 1000 * 60);
 };
 
-
-function checkDateUpdate() {
-  const currentDate = new Date().toISOString().slice(0, 10); // 获取当前日期（YYYY-MM-DD）
-
-  if (GLOBAL_DATA.lastDate !== currentDate) {
-    GLOBAL_DATA.update("lastDate", currentDate); // 更新 GLOBAL_DATA.lastDate
-    window.location.reload(); // 刷新页面
-  }
-}
-
-
-/**
- * 刷新一次剩余缓存
- */
+/** 刷新缓存用量显示 */
 function refreshCurrentCacheSize() {
-  const currentCache = document.querySelector(".current-cache");
-  currentCache.innerText = JSON_STORAGE.getSize().toFixed(2);
+  const node = document.querySelector(".current-cache");
+  if (node) node.textContent = JSON_STORAGE.getSize().toFixed(2);
 }
 
-/**
- * 初始化本地缓存
- * 同时会对全局数据发生更新
- */
+/** 初始化本地缓存结构 */
 function initStorage() {
   let panelList = JSON_STORAGE.get("panelList");
   if (panelList === null) {
     panelList = ["default"];
     JSON_STORAGE.set("panelList", panelList);
-    // 设置default信息
-    JSON_STORAGE.set(`default-data`, {
+    JSON_STORAGE.set("default-data", {
       width: 3,
       height: 2,
       type: "CLASSICS",
-      createTime: new Date().getTime()
+      createTime: new Date().getTime(),
     });
-    for (let i = 0; i < 6; i++) {
-      JSON_STORAGE.set(`default-text-${i}`, "");
-    }
+    for (let i = 0; i < 6; i++) JSON_STORAGE.set(`default-text-${i}`, "");
   }
-  let globalData = JSON_STORAGE.get("GLOBAL_DATA");
-  if (globalData === null) {
-    JSON_STORAGE.set(`GLOBAL_DATA`, GLOBAL_DATA);
+  const global = JSON_STORAGE.get("GLOBAL_DATA");
+  if (global === null) {
+    JSON_STORAGE.set("GLOBAL_DATA", GLOBAL_DATA);
   } else {
-    for (let key in globalData) {
-      GLOBAL_DATA[key] = globalData[key];
-    }
+    for (const key in global) GLOBAL_DATA[key] = global[key];
   }
 }

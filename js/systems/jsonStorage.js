@@ -1,91 +1,139 @@
+/**
+ * 本地数据层封装（localStorage）。
+ * 兼容原数据键：panelList / <title>-data / <title>-text-<i> / GLOBAL_DATA
+ * 并增强导入导出：带元信息、导入前自动备份、结构校验、友好错误。
+ */
 const JSON_STORAGE = {
-  /**
-   *
-   * @param {string} key
-   * @returns {object | string | null} JSON 对象，null的情况可能是不存在key或者解析错误
-   */
+  /** 读取并解析，失败/不存在返回 null */
   get(key) {
-    let res = localStorage.getItem(key);
-    if (res === null) {
-      return null;
-    }
-    // 不是null的情况
-    try {
-      return JSON.parse(res);
-    } catch (e) {
-      return null;
-    }
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    return safeJSONParse(raw, null);
   },
 
-  /**
-   * 设置一个内容
-   * @param {string} key 保证key是字符串，不要像python那样搞
-   * @param {object} value
-   */
+  /** 写入（自动 JSON 序列化） */
   set(key, value) {
-    if (typeof key !== "string") {
-      key = JSON.stringify(key);
-    }
-    value = JSON.stringify(value);
-    localStorage.setItem(key, value);
+    if (typeof key !== "string") key = JSON.stringify(key);
+    localStorage.setItem(key, JSON.stringify(value));
   },
 
   delete(key) {
     localStorage.removeItem(key);
   },
 
-  getSize() {
-    let total = 0;
-    for (let key in localStorage) {
-      if (localStorage.hasOwnProperty(key)) {
-        const item = localStorage[key];
-        for (let i = 0; i < item.length; i++) {
-          const charCode = item.charCodeAt(i);
-          total += charCode <= 0xff ? 1 : 2; // 单字节字符占用 1 字节，多字节字符占用 2 字节
-        }
-      }
+  /** 导出当前全部数据为纯对象 */
+  exportAll() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = this.get(k);
+      if (v !== null) data[k] = v;
     }
-    return total / (1024 * 1024); // 转换为 MB
+    return data;
   },
 
   /**
-   * 覆盖导入json字符串格式，同key会覆盖
-   * 如果导入的文件无法解析，会直接alert弹窗
-   * @param {string} contentString json字符串
+   * 导出为可下载的 JSON 文件（带元信息）。
+   * @returns {string} 文件名
+   */
+  downloadExport() {
+    const payload = {
+      app: "LittleText",
+      schema: 2,
+      exportedAt: new Date().toISOString(),
+      data: this.exportAll(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const date = new Date();
+    const name = `宫格记事本-${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}.json`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return name;
+  },
+
+  /**
+   * 导入前自动备份当前数据：下载一份备份文件。
+   * @returns {string} 备份文件名
+   */
+  backupCurrent() {
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const payload = {
+      app: "LittleText",
+      schema: 2,
+      exportedAt: new Date().toISOString(),
+      note: "导入前自动备份",
+      data: this.exportAll(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const name = `宫格记事本-备份-${ts}.json`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return name;
+  },
+
+  /**
+   * 从 JSON 字符串导入。
+   * 兼容两种格式：
+   *   - 新版：{ app, schema, data } —— 取 data
+   *   - 旧版/裸数据：直接是键值对象
+   * @param {string} contentString
+   * @returns {{ok:boolean, count?:number, error?:string}}
    */
   importByJsonString(contentString) {
-    try {
-      // 解析
-      const parsedData = JSON.parse(contentString);
-      console.log(parsedData);
-      // 解析正常，更新
-      for (let key in parsedData) {
-        this.set(key, parsedData[key]);
-      }
-    } catch (e) {
-      alert("Error importing JSON data:", e);
+    const parsed = safeJSONParse(contentString, undefined);
+    if (parsed === undefined) {
+      return { ok: false, error: "文件不是有效的 JSON 格式" };
     }
+    // 提取真实数据对象
+    const data =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.data
+        ? parsed.data
+        : parsed;
+
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return { ok: false, error: "文件内容结构不符合预期" };
+    }
+
+    // 写入（同键覆盖）
+    const keys = Object.keys(data);
+    keys.forEach((k) => this.set(k, data[k]));
+
+    return { ok: true, count: keys.length };
   },
-  /**
-   * 导出成json字符串格式。
-   * @returns {string}
-   */
-  exportToJsonString() {
-    let data = {};
-    for (let key in localStorage) {
-      if (localStorage.hasOwnProperty(key)) {
-        data[key] = this.get(key);
+
+  /** localStorage 占用大小（MB） */
+  getSize() {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const item = localStorage.getItem(k) || "";
+      for (let j = 0; j < item.length; j++) {
+        total += item.charCodeAt(j) <= 0xff ? 1 : 2;
       }
     }
-    return JSON.stringify(data);
+    return total / (1024 * 1024);
   },
-  /**
-   * 清空所有缓存数据！！非必要不要使用！仅用作调试！
-   */
+
+  /** 清空所有数据（仅调试用） */
   clearAll() {
     for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      localStorage.removeItem(key);
+      localStorage.removeItem(localStorage.key(i));
     }
   },
 };

@@ -4,3 +4,9 @@ node_modules
 
 # 测试文件
 test.html
+
+# 本地工作数据 / 缓存（不提交）
+.workbuddy/
+__pycache__/
+*.pyc
+sync_data/
