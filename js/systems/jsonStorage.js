@@ -184,10 +184,53 @@ const JSON_STORAGE = {
       }
     }
 
+    // 校正 panelList：导入文件可能缺失/不完整 panelList，导致新面板被写入
+    // localStorage 却未进入导航（表现为「导入后标签页不更新，只剩 default」）。
+    // 这里让 panelList 与实际存在的 panel:*（及旧版 -data）数据对齐；reconcile
+    // 会把旧版 -data 对应的面板名补进 panelList，随后 migratePanels 完成转换。
+    this.reconcilePanelList();
+
     // 兼容旧版导出文件：把散落的 -data / -text-i 合并为单 key
     this.migratePanels();
 
     return { ok: true, count: keys.length };
+  },
+
+  /**
+   * 让 panelList 与实际存储的面板数据对齐：
+   * - 跳过 panelList 中已无对应 panel:*（或旧版 -data）数据的「悬挂」项；
+   * - 追加存在于存储但不在 panelList 中的面板（修复导入文件缺 panelList 的情况）；
+   * - 保证 default 始终在列表中（首个）。
+   * 幂等，不改变顺序（原 panelList 顺序优先）。
+   * @returns {string[]} 校正后的 panelList
+   */
+  reconcilePanelList() {
+    const stored = this.get("panelList");
+    const list = Array.isArray(stored) ? stored.slice() : [];
+    const present = new Set();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k.indexOf("panel:") === 0) {
+        present.add(k.slice(6));
+      } else if (k.indexOf("panel:") !== 0 && /-data$/.test(k)) {
+        // 旧版存储：<title>-data
+        present.add(k.slice(0, -"-data".length));
+      }
+    }
+    // 保留原顺序中的有效项
+    const result = [];
+    list.forEach((n) => {
+      if (n && present.has(n) && !result.includes(n)) result.push(n);
+    });
+    // 追加缺失项
+    present.forEach((n) => {
+      if (!result.includes(n)) result.push(n);
+    });
+    // 确保 default 永远存在
+    if (!result.includes("default")) result.unshift("default");
+    this.set("panelList", result);
+    return result;
   },
 
   /**
