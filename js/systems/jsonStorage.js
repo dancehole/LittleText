@@ -1,9 +1,24 @@
 /**
  * 本地数据层封装（localStorage）。
- * 兼容原数据键：panelList / <title>-data / <title>-text-<i> / GLOBAL_DATA
- * 并增强导入导出：带元信息、导入前自动备份、结构校验、友好错误。
+ *
+ * 存储方案（v2 优化后）：
+ *   - panelList    : 面板名数组（索引）
+ *   - panel:<title>: 单个面板的全部数据 { width, height, type, createTime, cells:[...] }
+ *   - GLOBAL_DATA  : 全局设置
+ * 旧版（<title>-data / <title>-text-<i>）会在首次启动时由 migratePanels() 自动合并迁移。
+ *
+ * 容量识别（优化2）：浏览器 localStorage 实际按 UTF-16 存储，每个码元固定 2 字节；
+ * getSize() 据此计量，并提供 getSizeInfo() 做 80% 预警。
+ * set() 带配额兜底，空间不足时不再抛出 QuotaExceededError 导致页面崩溃，而是返回 false 并提示。
  */
 const JSON_STORAGE = {
+  /** localStorage 占用参考上限（多数浏览器约 5MB） */
+  QUOTA_MB: 5,
+  /** 预警阈值比例 */
+  WARN_RATIO: 0.8,
+  /** 配额提示节流时间戳 */
+  _lastWarnAt: 0,
+
   /** 读取并解析，失败/不存在返回 null */
   get(key) {
     const raw = localStorage.getItem(key);
@@ -11,10 +26,36 @@ const JSON_STORAGE = {
     return safeJSONParse(raw, null);
   },
 
-  /** 写入（自动 JSON 序列化） */
+  /**
+   * 写入（自动 JSON 序列化）。
+   * 带配额兜底：空间不足时不再抛错导致页面崩溃，而是返回 false 并提示。
+   * @returns {boolean} 是否写入成功
+   */
   set(key, value) {
     if (typeof key !== "string") key = JSON.stringify(key);
-    localStorage.setItem(key, JSON.stringify(value));
+    let str;
+    try {
+      str = JSON.stringify(value);
+    } catch (e) {
+      console.error("[JSON_STORAGE] 序列化失败:", e);
+      this._maybeWarn("数据序列化失败，无法保存", false);
+      return false;
+    }
+    try {
+      localStorage.setItem(key, str);
+      return true;
+    } catch (e) {
+      console.error("[JSON_STORAGE] 写入失败:", e);
+      const isQuota =
+        e && (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014);
+      this._maybeWarn(
+        isQuota
+          ? "本地存储空间已满，最新内容未能保存，请清理或导出备份"
+          : "保存失败：" + (e && e.message ? e.message : "未知错误"),
+        isQuota
+      );
+      return false;
+    }
   },
 
   delete(key) {
@@ -39,7 +80,7 @@ const JSON_STORAGE = {
   downloadExport() {
     const payload = {
       app: "LittleText",
-      schema: 2,
+      schema: 3,
       exportedAt: new Date().toISOString(),
       data: this.exportAll(),
     };
@@ -67,7 +108,7 @@ const JSON_STORAGE = {
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const payload = {
       app: "LittleText",
-      schema: 2,
+      schema: 3,
       exportedAt: new Date().toISOString(),
       note: "导入前自动备份",
       data: this.exportAll(),
@@ -92,6 +133,7 @@ const JSON_STORAGE = {
    * 兼容两种格式：
    *   - 新版：{ app, schema, data } —— 取 data
    *   - 旧版/裸数据：直接是键值对象
+   * 导入后自动迁移旧版 <title>-data / <title>-text-<i> 合并为 panel:<title>。
    * @param {string} contentString
    * @returns {{ok:boolean, count?:number, error?:string}}
    */
@@ -100,7 +142,6 @@ const JSON_STORAGE = {
     if (parsed === undefined) {
       return { ok: false, error: "文件不是有效的 JSON 格式" };
     }
-    // 提取真实数据对象
     const data =
       parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.data
         ? parsed.data
@@ -110,24 +151,46 @@ const JSON_STORAGE = {
       return { ok: false, error: "文件内容结构不符合预期" };
     }
 
-    // 写入（同键覆盖）
     const keys = Object.keys(data);
     keys.forEach((k) => this.set(k, data[k]));
+
+    // 兼容旧版导出文件：把散落的 -data / -text-i 合并为单 key
+    this.migratePanels();
 
     return { ok: true, count: keys.length };
   },
 
-  /** localStorage 占用大小（MB） */
+  /**
+   * 容量计量（UTF-16）：每个码元固定 2 字节，与浏览器实际占用一致。
+   * 同时计入 key 名长度（key 名同样占用存储）。
+   * @returns {number} 占用大小（MB）
+   */
   getSize() {
     let total = 0;
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       const item = localStorage.getItem(k) || "";
-      for (let j = 0; j < item.length; j++) {
-        total += item.charCodeAt(j) <= 0xff ? 1 : 2;
-      }
+      total += (k.length + item.length) * 2; // UTF-16：字符与 key 名均每单位 2 字节
     }
     return total / (1024 * 1024);
+  },
+
+  /**
+   * 容量信息，供 UI 预警。
+   * @returns {{mb:number, ratio:number, warning:boolean}}
+   */
+  getSizeInfo() {
+    const mb = this.getSize();
+    const ratio = mb / this.QUOTA_MB;
+    return { mb, ratio, warning: ratio >= this.WARN_RATIO };
+  },
+
+  /** 配额/异常提示（节流，避免输入时反复弹窗） */
+  _maybeWarn(msg, isQuota) {
+    const now = Date.now();
+    if (now - this._lastWarnAt < 8000) return;
+    this._lastWarnAt = now;
+    if (typeof Toast !== "undefined") Toast.show(msg, isQuota ? "error" : "error");
   },
 
   /** 清空所有数据（仅调试用） */
@@ -135,5 +198,56 @@ const JSON_STORAGE = {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       localStorage.removeItem(localStorage.key(i));
     }
+  },
+
+  // ---------- 面板存储（v2 优化：每面板单 key，消除 key 爆炸） ----------
+
+  /** 读取单个面板对象；不存在返回 null */
+  getPanel(title) {
+    return this.get(`panel:${title}`);
+  },
+
+  /** 写入单个面板对象（含 cells 数组） */
+  setPanel(title, obj) {
+    return this.set(`panel:${title}`, obj);
+  },
+
+  /**
+   * 迁移旧版存储：把 <title>-data 与 <title>-text-<i> 合并为 panel:<title>。
+   * 兼容已迁移（跳过并清理残留旧 key）与全新安装（无旧 key，跳过）。可重复幂等调用。
+   */
+  migratePanels() {
+    const panelList = this.get("panelList") || [];
+    panelList.forEach((title) => {
+      const newKey = `panel:${title}`;
+      const oldData = this.get(`${title}-data`);
+      const newObj = this.get(newKey);
+      if (newObj) {
+        // 已为新格式：清理可能残留的旧 key
+        if (oldData) this.delete(`${title}-data`);
+        for (let i = 0; i < 2000; i++) {
+          const k = `${title}-text-${i}`;
+          if (this.get(k) === null) break;
+          this.delete(k);
+        }
+        return;
+      }
+      if (!oldData) return; // 既无新格式也无旧数据
+      const total = (oldData.width || 1) * (oldData.height || 1);
+      const cells = [];
+      for (let i = 0; i < total; i++) {
+        const v = this.get(`${title}-text-${i}`);
+        cells.push(v === null ? "" : v);
+      }
+      this.set(newKey, {
+        width: oldData.width,
+        height: oldData.height,
+        type: oldData.type,
+        createTime: oldData.createTime,
+        cells,
+      });
+      this.delete(`${title}-data`);
+      for (let i = 0; i < total; i++) this.delete(`${title}-text-${i}`);
+    });
   },
 };

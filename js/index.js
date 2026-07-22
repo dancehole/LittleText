@@ -104,11 +104,36 @@ window.onload = function () {
   }, 1000 * 60);
 };
 
-/** 刷新缓存用量显示 */
+/** 刷新缓存用量显示（含 80% 预警标红） */
 function refreshCurrentCacheSize() {
   const node = document.querySelector(".current-cache");
-  if (node) node.textContent = JSON_STORAGE.getSize().toFixed(2);
+  if (!node) return;
+  const info = JSON_STORAGE.getSizeInfo();
+  node.textContent = info.mb.toFixed(2);
+  node.classList.toggle("is-warning", info.warning);
+  node.title = info.warning ? "本地存储已接近上限，建议导出备份" : "";
 }
+
+/** default 面板的示例内容（首次初始化时展示 markdown 渲染效果） */
+const DEFAULT_SAMPLE_MD =
+  "# 这是标题\n" +
+  "## 二级标题\n" +
+  "\n" +
+  "**加粗文本**\n" +
+  "*斜体*\n" +
+  "`code`\n" +
+  "\n" +
+  "[这是一个连接](https://dancehole.cn)\n" +
+  "\n" +
+  "![这是一个图片](https://cdn.jsdelivr.net/gh/dancehole/image@main/notebooks/test.png)\n" +
+  "\n" +
+  "- 列表1\n" +
+  "- 列表2\n" +
+  "\n" +
+  "> 引用文本1\n" +
+  "\n" +
+  "分割线：\n" +
+  "------";
 
 /** 初始化本地缓存结构 */
 function initStorage() {
@@ -116,13 +141,18 @@ function initStorage() {
   if (panelList === null) {
     panelList = ["default"];
     JSON_STORAGE.set("panelList", panelList);
-    JSON_STORAGE.set("default-data", {
-      width: 3,
-      height: 2,
-      type: "CLASSICS",
+    JSON_STORAGE.setPanel("default", {
+      width: 1,
+      height: 1,
+      type: "SINGLE",
       createTime: new Date().getTime(),
+      cells: [DEFAULT_SAMPLE_MD],
     });
-    for (let i = 0; i < 6; i++) JSON_STORAGE.set(`default-text-${i}`, "");
+  } else {
+    // 迁移旧版存储（<title>-data / <title>-text-<i> → panel:<title>）
+    JSON_STORAGE.migratePanels();
+    // 确保 default 面板为单文档（首次/存量迁移）
+    ensureDefaultIsDoc();
   }
   const global = JSON_STORAGE.get("GLOBAL_DATA");
   if (global === null) {
@@ -130,4 +160,60 @@ function initStorage() {
   } else {
     for (const key in global) GLOBAL_DATA[key] = global[key];
   }
+}
+
+/**
+ * 确保 default 面板为单文档（SINGLE，1×1）。
+ * - 不存在 / 不在列表中：新建并写入示例 markdown。
+ * - 已是单文档且为空：填充示例 markdown。
+ * - 已是单文档且有内容：保留用户内容。
+ * - 原为多宫格：合并所有格内容为一个文档（不丢数据），为空则填示例。
+ * 幂等：转换后 width*height===1，不会重复合并。
+ */
+function ensureDefaultIsDoc() {
+  const panelList = JSON_STORAGE.get("panelList") || [];
+  const hasDefault = panelList.includes("default");
+  const panel = JSON_STORAGE.getPanel("default");
+
+  if (!hasDefault || !panel) {
+    if (!hasDefault) {
+      panelList.push("default");
+      JSON_STORAGE.set("panelList", panelList);
+    }
+    JSON_STORAGE.setPanel("default", {
+      width: 1,
+      height: 1,
+      type: "SINGLE",
+      createTime: new Date().getTime(),
+      cells: [DEFAULT_SAMPLE_MD],
+    });
+    return;
+  }
+
+  // 已是单文档
+  if (panel.width === 1 && panel.height === 1) {
+    const empty =
+      !panel.cells ||
+      panel.cells.length === 0 ||
+      panel.cells.every((c) => !(c && String(c).trim()));
+    if (empty) {
+      panel.cells = [DEFAULT_SAMPLE_MD];
+      JSON_STORAGE.setPanel("default", panel);
+    }
+    return;
+  }
+
+  // 多宫格 → 合并为单文档（保留全部内容）
+  const merged = (panel.cells || [])
+    .filter((c) => c != null)
+    .map((c) => String(c))
+    .join("\n\n");
+  const finalText = merged.trim() ? merged : DEFAULT_SAMPLE_MD;
+  JSON_STORAGE.setPanel("default", {
+    width: 1,
+    height: 1,
+    type: "SINGLE",
+    createTime: panel.createTime || new Date().getTime(),
+    cells: [finalText],
+  });
 }
