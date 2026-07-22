@@ -221,7 +221,66 @@ class ComponentTextareaContainer {
 
       cell.appendChild(render);
       cell.appendChild(edit);
+
+      // 右键 → 放大编辑
+      cell.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const currentVal = edit.value;
+        ContextMenu.show(e.clientX, e.clientY, [
+          {
+            label: "放大编辑",
+            icon: ICONS.expand,
+            action: () => openZoomView(currentVal, (val) => saveCell(val)),
+          },
+        ]);
+      });
+
       mainEle.appendChild(cell);
+    }
+
+    /**
+     * 放大编辑视图（全屏浮层）
+     * @param {string} initialValue 初始文本
+     * @param {(val:string)=>void} saveFn 保存回调
+     */
+    function openZoomView(initialValue, saveFn) {
+      const overlay = document.createElement("div");
+      overlay.className = "zoom-overlay";
+      overlay.innerHTML =
+        '<div class="zoom-editor">' +
+          '<div class="zoom-editor__header">' +
+            '<span class="zoom-editor__title">放大编辑</span>' +
+            '<button class="icon-btn zoom-editor__close" aria-label="关闭">' + ICONS.close + '</button>' +
+          '</div>' +
+          '<textarea class="zoom-editor__textarea"></textarea>' +
+        '</div>';
+
+      const textarea = overlay.querySelector(".zoom-editor__textarea");
+      const closeBtn = overlay.querySelector(".zoom-editor__close");
+      textarea.value = initialValue;
+
+      function closeZoom() {
+        saveFn(textarea.value);
+        overlay.classList.remove("is-open");
+        setTimeout(() => overlay.remove(), 200);
+        document.removeEventListener("keydown", zoomKeyHandler);
+      }
+
+      function zoomKeyHandler(e) {
+        if (e.key === "Escape") closeZoom();
+      }
+
+      textarea.addEventListener("input", () => saveFn(textarea.value));
+      closeBtn.addEventListener("click", closeZoom);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeZoom(); });
+      document.addEventListener("keydown", zoomKeyHandler);
+
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => {
+        overlay.classList.add("is-open");
+        textarea.focus();
+      });
     }
 
     if (ComponentTextareaContainer.isMobile()) {
