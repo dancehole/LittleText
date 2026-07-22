@@ -849,3 +849,40 @@ textarea {
   resize: none;
   scrollbar-width: thin;
 }
+
+/* 放大查看：查看态 / 编辑态 双态布局 */
+.zoom-editor__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.zoom-editor__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.zoom-editor__preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  cursor: text;
+  word-break: break-word;
+  scrollbar-width: thin;
+}
+.zoom-editor__preview.is-empty::before {
+  content: "双击编辑";
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* 默认查看态：隐藏编辑区与「完成」；进入编辑态：隐藏渲染区与「编辑」 */
+.zoom-editor.is-view .zoom-editor__textarea { display: none; }
+.zoom-editor.is-edit .zoom-editor__preview { display: none; }
+.zoom-editor.is-view .zoom-editor__done { display: none; }
+.zoom-editor.is-edit .zoom-editor__edit { display: none; }
+

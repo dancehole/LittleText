@@ -128,9 +128,8 @@ const GLOBAL_SETTINGS_PANEL = (() => {
         return;
       }
       EventBus.emit("data:imported");
-      NAV_LIST.refresh();
-      ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
-      EventBus.emit("storage:changed");
+      // 重载内存状态并自动刷新页面（合并导入的面板到当前视图）
+      refreshAllFromStorage();
       Toast.show(`导入成功，共 ${result.count} 项，备份：${backupName}`, "success");
       importInput.value = "";
       modal.close();

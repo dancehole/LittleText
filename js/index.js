@@ -104,6 +104,38 @@ window.onload = function () {
   }, 1000 * 60);
 };
 
+/**
+ * 数据整体变更后（文件导入 / 云端下载）重新载入内存状态并刷新界面。
+ *
+ * 关键点：导入会覆盖/合并 localStorage 里的 GLOBAL_DATA，但内存中的 GLOBAL_DATA
+ * 对象不会自动同步；若不重载，refreshDomByPanelName 会用「旧的 currentPanel」
+ * 渲染，指向已不存在的面板时还会退化成一个空白宫格，表现为「导入后页面不更新」。
+ * 这里统一：重载内存 GLOBAL_DATA → 校正 currentPanel → 刷新导航与工作区。
+ */
+function refreshAllFromStorage() {
+  // 1) 重载内存 GLOBAL_DATA（与 localStorage 保持一致）
+  const stored = JSON_STORAGE.get("GLOBAL_DATA");
+  if (stored && typeof stored === "object") {
+    for (const key in stored) GLOBAL_DATA[key] = stored[key];
+  }
+
+  // 2) 确保 default 仍为单文档（幂等，不丢内容）
+  ensureDefaultIsDoc();
+
+  // 3) 校正 currentPanel：若指向的面板在新数据中不存在，则回退
+  const list = JSON_STORAGE.get("panelList") || ["default"];
+  if (!list.includes(GLOBAL_DATA.currentPanel)) {
+    const fallback = list.includes("default") ? "default" : list[0] || "default";
+    GLOBAL_DATA.update("currentPanel", fallback);
+  }
+
+  // 4) 刷新导航与工作区
+  NAV_LIST.refresh();
+  ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
+  refreshCurrentCacheSize();
+  EventBus.emit("storage:changed");
+}
+
 /** 刷新缓存用量显示（含 80% 预警标红） */
 function refreshCurrentCacheSize() {
   const node = document.querySelector(".current-cache");

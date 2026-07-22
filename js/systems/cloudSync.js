@@ -87,13 +87,12 @@ const CloudSync = (() => {
       }
       const payload = await res.json();
       const data = payload && payload.data ? payload.data : payload;
-      const result = JSON_STORAGE.importByJsonString(JSON.stringify(data));
+      // 合并导入（不丢本地独有面板、保留本地视图状态）
+      const result = JSON_STORAGE.importByJsonString(JSON.stringify(data), { merge: true });
       if (!result.ok) return { ok: false, error: result.error };
-      // 刷新 UI（与文件导入逻辑一致）
+      // 重载内存状态并自动刷新页面（与文件导入逻辑一致）
       EventBus.emit("data:imported");
-      NAV_LIST.refresh();
-      ComponentTextareaContainer.refreshDomByPanelName(GLOBAL_DATA.currentPanel);
-      EventBus.emit("storage:changed");
+      refreshAllFromStorage();
       return { ok: true, count: result.count };
     } catch (e) {
       return { ok: false, error: "网络错误：" + e.message };

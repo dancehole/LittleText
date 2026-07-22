@@ -222,15 +222,15 @@ class ComponentTextareaContainer {
       cell.appendChild(render);
       cell.appendChild(edit);
 
-      // 右键 → 放大编辑
+      // 右键 → 放大查看
       cell.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const currentVal = edit.value;
         ContextMenu.show(e.clientX, e.clientY, [
           {
-            label: "放大编辑",
-            icon: ICONS.expand,
+            label: "放大查看",
+            icon: ICONS.view,
             action: () => openZoomView(currentVal, (val) => saveCell(val)),
           },
         ]);
@@ -240,7 +240,9 @@ class ComponentTextareaContainer {
     }
 
     /**
-     * 放大编辑视图（全屏浮层）
+     * 放大查看视图（全屏浮层）
+     * 默认进入「查看」态（渲染 markdown），双击或点「编辑」进入编辑态，
+     * 点「完成」/Esc 渲染并退回放大查看态。
      * @param {string} initialValue 初始文本
      * @param {(val:string)=>void} saveFn 保存回调
      */
@@ -248,30 +250,87 @@ class ComponentTextareaContainer {
       const overlay = document.createElement("div");
       overlay.className = "zoom-overlay";
       overlay.innerHTML =
-        '<div class="zoom-editor">' +
+        '<div class="zoom-editor is-view">' +
           '<div class="zoom-editor__header">' +
-            '<span class="zoom-editor__title">放大编辑</span>' +
-            '<button class="icon-btn zoom-editor__close" aria-label="关闭">' + ICONS.close + '</button>' +
+            '<span class="zoom-editor__title">查看</span>' +
+            '<div class="zoom-editor__actions">' +
+              '<button class="btn btn--ghost zoom-editor__edit" title="进入编辑（也可双击）">编辑</button>' +
+              '<button class="btn btn--primary zoom-editor__done" title="渲染并退出编辑">完成</button>' +
+              '<button class="icon-btn zoom-editor__close" aria-label="关闭">' + ICONS.close + '</button>' +
+            '</div>' +
           '</div>' +
-          '<textarea class="zoom-editor__textarea"></textarea>' +
+          '<div class="zoom-editor__body">' +
+            '<div class="zoom-editor__preview cell-render"></div>' +
+            '<textarea class="zoom-editor__textarea"></textarea>' +
+          '</div>' +
         '</div>';
 
+      const editor = overlay.querySelector(".zoom-editor");
+      const title = overlay.querySelector(".zoom-editor__title");
+      const preview = overlay.querySelector(".zoom-editor__preview");
       const textarea = overlay.querySelector(".zoom-editor__textarea");
+      const editBtn = overlay.querySelector(".zoom-editor__edit");
+      const doneBtn = overlay.querySelector(".zoom-editor__done");
       const closeBtn = overlay.querySelector(".zoom-editor__close");
-      textarea.value = initialValue;
+
+      // 当前文本（查看态与编辑态共享）
+      let value = initialValue || "";
+      preview.innerHTML = value ? Markdown.render(value) : "";
+      preview.classList.toggle("is-empty", !value);
+      textarea.value = value;
+
+      function enterEdit() {
+        textarea.value = value;
+        editor.classList.remove("is-view");
+        editor.classList.add("is-edit");
+        title.textContent = "编辑";
+        requestAnimationFrame(() => {
+          textarea.focus();
+          const len = textarea.value.length;
+          textarea.setSelectionRange(len, len);
+        });
+      }
+
+      function exitEdit() {
+        if (!editor.classList.contains("is-edit")) return;
+        value = textarea.value;
+        saveFn(value);
+        preview.innerHTML = value ? Markdown.render(value) : "";
+        preview.classList.toggle("is-empty", !value);
+        editor.classList.remove("is-edit");
+        editor.classList.add("is-view");
+        title.textContent = "查看";
+      }
 
       function closeZoom() {
-        saveFn(textarea.value);
+        const finalVal = editor.classList.contains("is-edit") ? textarea.value : value;
+        saveFn(finalVal);
         overlay.classList.remove("is-open");
         setTimeout(() => overlay.remove(), 200);
         document.removeEventListener("keydown", zoomKeyHandler);
       }
 
       function zoomKeyHandler(e) {
-        if (e.key === "Escape") closeZoom();
+        if (e.key === "Escape") {
+          if (editor.classList.contains("is-edit")) {
+            exitEdit(); // 编辑态：渲染并退回查看
+          } else {
+            closeZoom(); // 查看态：关闭
+          }
+        }
       }
 
-      textarea.addEventListener("input", () => saveFn(textarea.value));
+      // 双击渲染区进入编辑（点击链接不触发）
+      preview.addEventListener("dblclick", (e) => {
+        if (e.target.closest("a")) return;
+        enterEdit();
+      });
+      textarea.addEventListener("input", () => {
+        value = textarea.value;
+        saveFn(value);
+      });
+      editBtn.addEventListener("click", enterEdit);
+      doneBtn.addEventListener("click", exitEdit);
       closeBtn.addEventListener("click", closeZoom);
       overlay.addEventListener("click", (e) => { if (e.target === overlay) closeZoom(); });
       document.addEventListener("keydown", zoomKeyHandler);
@@ -279,7 +338,6 @@ class ComponentTextareaContainer {
       document.body.appendChild(overlay);
       requestAnimationFrame(() => {
         overlay.classList.add("is-open");
-        textarea.focus();
       });
     }
 

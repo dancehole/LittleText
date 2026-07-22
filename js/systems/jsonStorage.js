@@ -134,10 +134,18 @@ const JSON_STORAGE = {
    *   - 新版：{ app, schema, data } —— 取 data
    *   - 旧版/裸数据：直接是键值对象
    * 导入后自动迁移旧版 <title>-data / <title>-text-<i> 合并为 panel:<title>。
+   *
    * @param {string} contentString
+   * @param {{merge?:boolean}} [options] merge=true（默认）时做「合并」：
+   *   - panelList 取本地 ∪ 导入（去重，保留本地顺序，导入新增追加在后）；
+   *   - GLOBAL_DATA 以本地视图状态为准（保留本地 currentPanel / 隐私锁 / 云同步配置），
+   *     避免下载/导入意外改变当前正在查看的面板或本地设置；
+   *   - 同名面板数据以导入为准（覆盖），本地独有面板保留。
+   *   merge=false 时为纯覆盖导入。
    * @returns {{ok:boolean, count?:number, error?:string}}
    */
-  importByJsonString(contentString) {
+  importByJsonString(contentString, options = {}) {
+    const merge = options.merge !== false; // 默认合并
     const parsed = safeJSONParse(contentString, undefined);
     if (parsed === undefined) {
       return { ok: false, error: "文件不是有效的 JSON 格式" };
@@ -151,8 +159,30 @@ const JSON_STORAGE = {
       return { ok: false, error: "文件内容结构不符合预期" };
     }
 
+    // 合并模式下先取本地快照（用于合并 panelList 与保留本地视图状态）
+    const localList = merge ? (this.get("panelList") || []) : null;
+    const localGlobal = merge ? this.get("GLOBAL_DATA") : null;
+
     const keys = Object.keys(data);
     keys.forEach((k) => this.set(k, data[k]));
+
+    if (merge) {
+      // 1) 合并 panelList：本地在前，导入新增在后，去重（不丢本地独有面板）
+      const importedList = Array.isArray(data.panelList) ? data.panelList : [];
+      const mergedList = Array.isArray(localList) ? [...localList] : [];
+      importedList.forEach((n) => {
+        if (n && !mergedList.includes(n)) mergedList.push(n);
+      });
+      if (mergedList.length) this.set("panelList", mergedList);
+
+      // 2) 保留本地视图状态：以导入 GLOBAL_DATA 为底、本地字段覆盖在上
+      //    这样 currentPanel / lock / 云同步配置仍沿用本地，不被导入内容改写
+      if (localGlobal && typeof localGlobal === "object") {
+        const importedGlobal =
+          data.GLOBAL_DATA && typeof data.GLOBAL_DATA === "object" ? data.GLOBAL_DATA : {};
+        this.set("GLOBAL_DATA", { ...importedGlobal, ...localGlobal });
+      }
+    }
 
     // 兼容旧版导出文件：把散落的 -data / -text-i 合并为单 key
     this.migratePanels();
