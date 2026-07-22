@@ -41,6 +41,10 @@ PORT = int(os.environ.get("PORT", "8000"))
 HOST = os.environ.get("HOST", "0.0.0.0")
 MAX_BODY = 16 * 1024 * 1024  # 16 MB 上限
 
+# 本地期望令牌（从环境变量读取，不上传 git）
+# 设置后只接受此令牌的请求；留空则接受任意令牌（兼容旧版）
+EXPECTED_TOKEN = os.environ.get("SYNC_TOKEN", "") or ""
+
 # CORS：单人使用，允许任意来源即可（不携带 cookie）
 CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -127,6 +131,8 @@ class Handler(BaseHTTPRequestHandler):
         token = get_token(self)
         if not token:
             return self._send(401, {"ok": False, "error": "缺少 token"})
+        if EXPECTED_TOKEN and token != EXPECTED_TOKEN:
+            return self._send(403, {"ok": False, "error": "token 不匹配"})
         fp = file_for_token(token)
         if not os.path.exists(fp):
             return self._send(404, {"ok": False, "error": "云端暂无备份"})
@@ -143,6 +149,8 @@ class Handler(BaseHTTPRequestHandler):
         token = get_token(self)
         if not token:
             return self._send(401, {"ok": False, "error": "缺少 token"})
+        if EXPECTED_TOKEN and token != EXPECTED_TOKEN:
+            return self._send(403, {"ok": False, "error": "token 不匹配"})
         raw = self._read_body()
         if raw is None:
             return self._send(413, {"ok": False, "error": "数据过大（上限 16MB）"})
@@ -166,6 +174,8 @@ class Handler(BaseHTTPRequestHandler):
         token = get_token(self)
         if not token:
             return self._send(401, {"ok": False, "error": "缺少 token"})
+        if EXPECTED_TOKEN and token != EXPECTED_TOKEN:
+            return self._send(403, {"ok": False, "error": "token 不匹配"})
         fp = file_for_token(token)
         if os.path.exists(fp):
             try:

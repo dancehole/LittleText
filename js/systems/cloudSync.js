@@ -1,12 +1,15 @@
 /**
  * 云同步模块：与极简后端通信，云端为单用户保留一份数据副本。
  * 仅支持：上传覆盖（导出到云端）/ 下载读取（从云端导入）。
- * 配置（同步地址、令牌、自动同步）持久化在 localStorage。
  *
  * 后端接口（均由 settings 里配置的 baseUrl + ?token= 拼成）：
  *   POST   {baseUrl}?token=XXX   上传覆盖
  *   GET    {baseUrl}?token=XXX   下载读取（无数据 404）
+ *
+ * 同步地址和令牌在设置面板中配置，保存在 localStorage，不会上传到服务器。
  */
+const CLOUD_SYNC_DEFAULT_URL = "https://dancehole.cn/api/littletext/sync/";
+
 const CloudSync = (() => {
   const K_URL = "cloudSyncUrl";
   const K_TOKEN = "cloudSyncToken";
@@ -15,7 +18,7 @@ const CloudSync = (() => {
   /** 读取配置 */
   function getConfig() {
     return {
-      url: (localStorage.getItem(K_URL) || "").trim(),
+      url: (localStorage.getItem(K_URL) || CLOUD_SYNC_DEFAULT_URL).trim(),
       token: localStorage.getItem(K_TOKEN) || "",
       auto: localStorage.getItem(K_AUTO) === "1",
     };
