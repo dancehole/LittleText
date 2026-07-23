@@ -7,6 +7,7 @@ const GLOBAL_SETTINGS_PANEL = (() => {
 
   // 云同步相关元素
   let syncUrlInput, syncTokenInput, syncAutoBtn, syncAutoState, syncPushBtn, syncPullBtn, syncStatus;
+  let syncSaveConfigBtn, syncConfigSaved;
 
   function init() {
     modal = Modal.get("global-settings-panel");
@@ -26,6 +27,8 @@ const GLOBAL_SETTINGS_PANEL = (() => {
     syncPushBtn = document.getElementById("sync-push");
     syncPullBtn = document.getElementById("sync-pull");
     syncStatus = document.getElementById("sync-status");
+    syncSaveConfigBtn = document.getElementById("sync-save-config");
+    syncConfigSaved = document.getElementById("sync-config-saved");
 
     lockState.textContent = GLOBAL_DATA.lock ? "开启" : "关闭";
     if (GLOBAL_DATA.lock) lockBar.classList.add("is-on");
@@ -36,18 +39,29 @@ const GLOBAL_SETTINGS_PANEL = (() => {
     lockSwitch.addEventListener("click", toggleLock);
 
     // —— 云同步事件 ——
-    // 输入即持久化（地址 / 令牌）
-    syncUrlInput.addEventListener("input", (e) =>
-      CloudSync.setConfig({ url: e.target.value })
-    );
-    syncTokenInput.addEventListener("input", (e) =>
-      CloudSync.setConfig({ token: e.target.value })
-    );
     // 自动同步开关
     syncAutoBtn.addEventListener("click", toggleAutoSync);
     // 上传 / 下载
     syncPushBtn.addEventListener("click", handlePush);
     syncPullBtn.addEventListener("click", handlePull);
+
+    // —— 保存同步配置 ——
+    syncSaveConfigBtn.addEventListener("click", handleSaveConfig);
+    // 输入时自动保存并显示已保存提示
+    syncUrlInput.addEventListener("input", (e) => {
+      CloudSync.setConfig({ url: e.target.value });
+      showConfigSaved();
+    });
+    syncTokenInput.addEventListener("input", (e) => {
+      CloudSync.setConfig({ token: e.target.value });
+      showConfigSaved();
+    });
+
+    // —— 刷新工作区（设置面板内） ——
+    document.getElementById("refresh-btn-settings").addEventListener("click", () => {
+      refreshAllFromStorage();
+      Toast.show("已刷新工作区", "success");
+    });
   }
 
   /** 打开弹窗时回填云同步配置 */
@@ -74,6 +88,26 @@ const GLOBAL_SETTINGS_PANEL = (() => {
     CloudSync.setConfig({ auto: next });
     renderAutoState(next);
     setStatus(next ? "已开启：编辑后将自动上传到云端" : "已关闭自动同步", next ? "info" : "");
+  }
+
+  /** 保存同步配置并显式提示 */
+  function handleSaveConfig() {
+    CloudSync.setConfig({
+      url: syncUrlInput.value,
+      token: syncTokenInput.value,
+    });
+    showConfigSaved();
+    Toast.show("同步配置已保存", "success");
+  }
+
+  /** 显示"已保存"指示器，3秒后自动隐藏 */
+  function showConfigSaved() {
+    if (!syncConfigSaved) return;
+    syncConfigSaved.style.display = "inline";
+    clearTimeout(syncConfigSaved._hideTimer);
+    syncConfigSaved._hideTimer = setTimeout(() => {
+      syncConfigSaved.style.display = "none";
+    }, 3000);
   }
 
   async function handlePush() {

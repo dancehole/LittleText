@@ -22,6 +22,13 @@
             <span>宫格记事本</span>
           </div>
           <div class="sidebar__actions">
+            <button class="icon-btn" id="refresh-btn" title="刷新工作区" aria-label="刷新工作区">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
             <button class="icon-btn icon-btn--accent" id="add-panel-btn" title="新建面板" aria-label="新建面板">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/>
@@ -100,9 +107,10 @@
         <div class="modal__body">
           <section class="field">
             <span class="field__label">数据安全</span>
-            <div style="display:flex; gap:12px;">
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
               <button class="btn btn--ghost" id="export-btn">导出记录</button>
               <button class="btn btn--ghost" id="import-btn">导入记录</button>
+              <button class="btn btn--ghost" id="refresh-btn-settings">刷新工作区</button>
             </div>
             <input type="file" id="import-file-input" accept="application/json,.json" hidden />
           </section>
@@ -126,6 +134,10 @@
             <div class="field">
               <label class="field__label" for="sync-token">同步令牌</label>
               <input class="input" id="sync-token" type="password" placeholder="自定义一段密钥，前后端需一致" autocomplete="off" />
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:var(--space-4);">
+              <button class="btn btn--ghost" id="sync-save-config" style="flex:1;">保存同步配置</button>
+              <span style="font-size:12px; color:var(--success); display:none;" id="sync-config-saved">✓ 已保存</span>
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
               <span style="font-size:13px; color:var(--text-secondary);">编辑后自动同步到云端</span>

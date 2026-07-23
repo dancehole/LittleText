@@ -19,6 +19,11 @@ window.onload = function () {
   document.getElementById("add-panel-btn").addEventListener("click", () =>
     DIALOG_ADD_PANEL.open()
   );
+  // 刷新按钮
+  document.getElementById("refresh-btn").addEventListener("click", () => {
+    refreshAllFromStorage();
+    Toast.show("已刷新工作区", "success");
+  });
   // 全局设置按钮
   document.getElementById("global-setting-btn").addEventListener("click", () => {
     GLOBAL_SETTINGS_PANEL.populate();
