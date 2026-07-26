@@ -57,7 +57,7 @@
   --transition-fast: 0.12s ease;
 
   /* —— 布局令牌 —— */
-  --sidebar-width: 264px;
+  --sidebar-width: 220px;
   --header-height: 56px;
 }
 
@@ -744,16 +744,11 @@ textarea {
     font-size: 13.5px;
   }
 
-  /* 一周七天（7×1）：单行横向展开 */
-  .workspace[data-panel-type="WEEK"] .cell {
-    padding: 14px;
-    font-size: 14.5px;
-  }
-
-  /* 经典、九宫格、八宫格、十字、左右分屏：默认舒适内边距 */
+  /* 经典、九宫格、八宫格、一周七天、十字、左右分屏：默认舒适内边距 */
   .workspace[data-panel-type="CLASSICS"] .cell,
   .workspace[data-panel-type="NINE"] .cell,
   .workspace[data-panel-type="EIGHT"] .cell,
+  .workspace[data-panel-type="WEEK"] .cell,
   .workspace[data-panel-type="CROSS"] .cell,
   .workspace[data-panel-type="LEFT_RIGHT"] .cell {
     padding: 12px;

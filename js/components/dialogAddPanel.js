@@ -5,10 +5,10 @@ const PANEL_TYPES = {
   CLASSICS: { name: "经典六宫格", width: 3, height: 2 },
   SINGLE: { name: "单文档", width: 1, height: 1 },
   LEFT_RIGHT: { name: "左右分屏", width: 2, height: 1 },
-  CROSS: { name: "十字格", width: 2, height: 2 },
+  CROSS: { name: "四宫格/四象限", width: 2, height: 2 },
   EIGHT: { name: "八宫格", width: 4, height: 2 },
   NINE: { name: "九宫格", width: 3, height: 3 },
-  WEEK: { name: "一周七天", width: 7, height: 1 },
+  WEEK: { name: "一周七天", width: 4, height: 2 },
   MOON: { name: "一月表格", width: 7, height: 6 },
   YEAR: { name: "一年十二月", width: 4, height: 3 },
 };
@@ -126,7 +126,7 @@ const DIALOG_ADD_PANEL = (() => {
   /** 部分内置类型自带初始内容 */
   function generateDefaultContent(select) {
     if (select === "WEEK") {
-      return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((d) => d + "\n\n");
+      return ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "每周总结"].map((d) => d + "\n\n");
     }
     if (select === "MOON") {
       const { year, month } = getMoonDate();
