@@ -103,6 +103,7 @@ class ComponentTextareaContainer {
   refreshTextArea() {
     const mainEle = document.getElementById("workspace");
     mainEle.innerHTML = "";
+    mainEle.dataset.panelType = this.type;
 
     const now = new Date();
     const currentDay = now.getDate();
@@ -123,7 +124,7 @@ class ComponentTextareaContainer {
         mainEle.style.gridTemplateRows = "1fr";
       } else {
         mainEle.style.gridTemplateColumns = `repeat(${this.width}, 1fr)`;
-        mainEle.style.gridTemplateRows = `repeat(${this.height}, auto)`;
+        mainEle.style.gridTemplateRows = `repeat(${this.height}, 1fr)`;
       }
     } else {
       mainEle.style.gridTemplateColumns = "";

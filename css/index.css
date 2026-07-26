@@ -706,6 +706,58 @@ textarea {
     align-items: flex-start;
     gap: var(--space-2);
   }
+
+  /* —— 桌面端宫格固定等分，内容不会撑高整行 —— */
+  .workspace {
+    min-height: 0;
+  }
+  .grid {
+    min-height: 0;
+  }
+  .cell {
+    min-height: 0;
+    max-height: none;
+  }
+  .cell-edit {
+    overflow-y: auto;
+  }
+
+  /* —— 按面板类型差异化适配 —— */
+  /* 月历（7×5/6）：格数多，适当收紧 */
+  .workspace[data-panel-type="MOON"] .cell {
+    padding: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .workspace[data-panel-type="MOON"] .cell-render .md-h1,
+  .workspace[data-panel-type="MOON"] .cell-render .md-h2 {
+    font-size: 1em;
+  }
+  /* 月历中未启用日期不显示“双击编辑”，保持整洁 */
+  .workspace[data-panel-type="MOON"] .cell-render.is-empty::before {
+    content: "";
+  }
+
+  /* 一年十二月（4×3）：中等密度 */
+  .workspace[data-panel-type="YEAR"] .cell {
+    padding: 10px;
+    font-size: 13.5px;
+  }
+
+  /* 一周七天（7×1）：单行横向展开 */
+  .workspace[data-panel-type="WEEK"] .cell {
+    padding: 14px;
+    font-size: 14.5px;
+  }
+
+  /* 经典、九宫格、八宫格、十字、左右分屏：默认舒适内边距 */
+  .workspace[data-panel-type="CLASSICS"] .cell,
+  .workspace[data-panel-type="NINE"] .cell,
+  .workspace[data-panel-type="EIGHT"] .cell,
+  .workspace[data-panel-type="CROSS"] .cell,
+  .workspace[data-panel-type="LEFT_RIGHT"] .cell {
+    padding: 12px;
+  }
 }
 
 /* ============================================================
