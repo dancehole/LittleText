@@ -14,21 +14,44 @@ const PANEL_TYPES = {
 };
 
 const DIALOG_ADD_PANEL = (() => {
-  let modal, selectEle, titleInput;
+  let modal, selectEle, titleInput, monthInput = null, dateField = null;
   let title = "";
   let currentSelect = "CLASSICS";
   // 当前类型对应的默认名称，用于在用户未手动修改时跟随类型切换
   let lastDefault = PANEL_TYPES[currentSelect].name;
 
-  /** 取某类型的默认面板名（即类型名） */
+  /** 取某类型的默认面板名（即类型名）；月历用所选年月 */
   function defaultNameOf(select) {
+    if (select === "MOON") {
+      const { year, month } = getMoonDate();
+      return `${year}年${month + 1}月`;
+    }
     return PANEL_TYPES[select].name;
+  }
+
+  /** 从月份输入框解析年月（month 为 0-based）；无效时回退到当前月 */
+  function getMoonDate() {
+    const v = monthInput && monthInput.value;
+    if (v && /^\d{4}-\d{2}$/.test(v)) {
+      const [y, m] = v.split("-").map(Number);
+      return { year: y, month: m - 1 };
+    }
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  }
+
+  /** 仅月历类型显示“选择年月”字段 */
+  function updateDateFieldVisibility() {
+    if (!dateField) return;
+    dateField.style.display = currentSelect === "MOON" ? "" : "none";
   }
 
   function init() {
     modal = Modal.get("add-panel");
     selectEle = document.getElementById("panel-type");
     titleInput = document.getElementById("panel-name");
+    monthInput = document.getElementById("panel-month");
+    dateField = document.getElementById("panel-date-field");
 
     // 填充类型选项
     for (const key in PANEL_TYPES) {
@@ -42,6 +65,7 @@ const DIALOG_ADD_PANEL = (() => {
     titleInput.addEventListener("input", (e) => (title = e.target.value.trim()));
     selectEle.addEventListener("change", (e) => {
       currentSelect = e.target.value;
+      updateDateFieldVisibility();
       const def = defaultNameOf(currentSelect);
       // 名称仍为上一类型的默认名时，同步为新类型默认名
       if (titleInput.value === lastDefault) {
@@ -55,6 +79,13 @@ const DIALOG_ADD_PANEL = (() => {
   }
 
   function open() {
+    // 月份输入框默认值为当前月
+    if (monthInput) {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      monthInput.value = `${d.getFullYear()}-${mm}`;
+    }
+    updateDateFieldVisibility();
     const def = defaultNameOf(currentSelect);
     titleInput.value = def;
     title = def;
@@ -74,11 +105,11 @@ const DIALOG_ADD_PANEL = (() => {
       return;
     }
     const type = PANEL_TYPES[currentSelect];
-    // 月历高度由实际周数决定（不污染共享注册表 PANEL_TYPES）
+    // 月历高度由所选年月的实际周数决定（不污染共享注册表 PANEL_TYPES）
     let height = type.height;
     if (currentSelect === "MOON") {
-      const d = new Date();
-      height = Math.ceil(generateCalendarArray(d.getFullYear(), d.getMonth()).length / 7);
+      const { year, month } = getMoonDate();
+      height = Math.ceil(generateCalendarArray(year, month).length / 7);
     }
     const content = generateDefaultContent(currentSelect);
     const panel = new ComponentTextareaContainer(title, type.width, height, currentSelect);
@@ -98,8 +129,8 @@ const DIALOG_ADD_PANEL = (() => {
       return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((d) => d + "\n\n");
     }
     if (select === "MOON") {
-      const d = new Date();
-      return generateCalendarArray(d.getFullYear(), d.getMonth());
+      const { year, month } = getMoonDate();
+      return generateCalendarArray(year, month);
     }
     if (select === "YEAR") {
       return [

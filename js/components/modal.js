@@ -80,18 +80,32 @@ const Modal = (() => {
     node.querySelector(".modal__body p").textContent = opt.message || "";
     node.querySelector("[data-confirm]").textContent = opt.confirmText || "确定";
 
+    // 关闭并同步移除遮罩；不依赖 transitionend，避免遮罩残留导致界面“假死”
+    let closed = false;
     const close = () => {
+      if (closed) return;
+      closed = true;
       overlay.classList.remove("is-open");
       overlay.setAttribute("aria-hidden", "true");
       document.body.style.overflow = "";
-      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
-      setTimeout(() => overlay.remove(), 400);
+      document.removeEventListener("keydown", onEsc);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     };
-    const onConfirm = () => {
+    const onEsc = (e) => {
+      if (e.key === "Escape") {
+        close();
+        opt.onCancel && opt.onCancel();
+      }
+    };
+
+    node.querySelector("[data-confirm]").addEventListener("click", () => {
       close();
-      opt.onConfirm && opt.onConfirm();
-    };
-    node.querySelector("[data-confirm]").addEventListener("click", onConfirm);
+      try {
+        opt.onConfirm && opt.onConfirm();
+      } catch (err) {
+        console.error("[Modal.confirm] onConfirm error:", err);
+      }
+    });
     node.querySelector("[data-cancel]").addEventListener("click", () => {
       close();
       opt.onCancel && opt.onCancel();
@@ -104,14 +118,9 @@ const Modal = (() => {
     });
 
     document.body.appendChild(overlay);
+    overlay.appendChild(node);
     requestAnimationFrame(() => overlay.classList.add("is-open"));
-    document.addEventListener("keydown", function esc(e) {
-      if (e.key === "Escape") {
-        close();
-        opt.onCancel && opt.onCancel();
-        document.removeEventListener("keydown", esc);
-      }
-    });
+    document.addEventListener("keydown", onEsc);
   }
 
   return {
