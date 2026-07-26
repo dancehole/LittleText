@@ -286,6 +286,32 @@ textarea {
   background: var(--danger-soft);
   color: var(--danger-hover);
 }
+.nav-item__drag {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  cursor: grab;
+  transition: var(--transition-fast);
+  flex: 0 0 auto;
+}
+.nav-item:hover .nav-item__drag {
+  display: inline-flex;
+}
+.nav-item__drag:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.nav-item.dragging {
+  opacity: 0.4;
+}
+.nav-item.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
 
 /* 主工作区 */
 .workspace {

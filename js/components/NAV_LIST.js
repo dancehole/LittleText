@@ -33,6 +33,19 @@ const NAV_LIST = (() => {
     item.appendChild(title);
 
     if (!GLOBAL_DATA.isLockCurrent) {
+      // 拖拽排序手柄（hover 显示，位于删除按钮左侧）
+      const drag = el("button", "nav-item__drag");
+      drag.innerHTML = ICONS.drag;
+      drag.title = "拖动调整顺序";
+      drag.setAttribute("aria-label", `调整${name}顺序`);
+      drag.addEventListener("click", (e) => e.stopPropagation());
+      // 仅在手柄上按下时才允许拖拽，避免点击标题误触发拖拽
+      drag.addEventListener("mousedown", () => (item._armed = true));
+      drag.addEventListener("mouseup", () => {
+        if (!item.classList.contains("dragging")) item._armed = false;
+      });
+      item.appendChild(drag);
+
       const del = el("button", "nav-item__del");
       del.innerHTML = ICONS.trash;
       del.title = "删除面板";
@@ -43,6 +56,40 @@ const NAV_LIST = (() => {
       });
       item.appendChild(del);
     }
+
+    // 拖拽排序：整项可拖，但只有从手柄发起才生效
+    item.setAttribute("draggable", "true");
+    item.addEventListener("dragstart", (e) => {
+      if (!item._armed) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", name);
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragover", (e) => {
+      const dragging = navEle().querySelector(".nav-item.dragging");
+      if (!dragging || dragging === item) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      item.classList.add("drop-target");
+    });
+    item.addEventListener("dragleave", () => item.classList.remove("drop-target"));
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      item.classList.remove("drop-target");
+      const dragging = navEle().querySelector(".nav-item.dragging");
+      if (!dragging || dragging === item) return;
+      reorderPanel(dragging.dataset.name, item.dataset.name, e.clientY, item);
+    });
+    item.addEventListener("dragend", () => {
+      item._armed = false;
+      item.classList.remove("dragging");
+      navEle()
+        .querySelectorAll(".drop-target")
+        .forEach((n) => n.classList.remove("drop-target"));
+    });
 
     item.addEventListener("click", () => selectPanel(name));
 
@@ -172,6 +219,31 @@ const NAV_LIST = (() => {
         action: () => deletePanel(name),
       },
     ]);
+  }
+
+  /**
+   * 拖拽落点后重排 panelList 并持久化。
+   * @param {string} fromName 被拖动的面板名
+   * @param {string} toName 目标面板名
+   * @param {number} clientY 鼠标 Y，用于判断插入到目标项上方或下方
+   * @param {HTMLElement} toItem 目标项 DOM（用于取中点）
+   */
+  function reorderPanel(fromName, toName, clientY, toItem) {
+    const list = JSON_STORAGE.get("panelList") || [];
+    const from = list.indexOf(fromName);
+    if (from === -1) return;
+    const [moved] = list.splice(from, 1);
+    const newTo = list.indexOf(toName);
+    if (newTo === -1) {
+      list.push(moved);
+    } else {
+      const rect = toItem.getBoundingClientRect();
+      const after = clientY > rect.top + rect.height / 2;
+      list.splice(after ? newTo + 1 : newTo, 0, moved);
+    }
+    JSON_STORAGE.set("panelList", list);
+    refresh();
+    EventBus.emit("panel:reordered", list);
   }
 
   return { refresh, selectPanel, deletePanel };
