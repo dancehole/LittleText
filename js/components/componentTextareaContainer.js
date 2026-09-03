@@ -215,6 +215,9 @@ class ComponentTextareaContainer {
         if (!p) return;
         p.cells[i] = val;
         JSON_STORAGE.setPanel(self.title, p);
+        // 同步隐藏编辑框的值：放大视图保存的内容若不写回 edit，
+        // 再次双击进入编辑时会显示旧值，甚至被后续 exitEdit 覆盖丢失
+        edit.value = val;
         render.innerHTML = val ? Markdown.render(val) : "";
         render.classList.toggle("is-empty", !val);
         EventBus.emit("cell:change", { panel: self.title, index: i });
