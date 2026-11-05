@@ -9,12 +9,13 @@
  *    拒绝 javascript:/data:(非图片)/vbscript: 等危险协议。
  *
  * 支持的语法（保持「空间有限」的轻量目标）：
- *   # 标题1   ## 标题2          （两层标题）
+ *   # 标题1  ## 标题2  ### 标题3  #### 标题4  ##### 标题5   （h3~h5 视觉仅加粗）
  *   **加粗**  *斜体*  `行内代码`
  *   [文字](https://...)           （安全链接，新窗口打开，rel=noopener）
  *   ![说明](https://...png)       （图片）
  *   - 列表项  /  * 列表项        （无序列表）
  *   > 引用行
+ *   ``` 或 ```js                  （围栏代码块，无语法高亮，仅独特背景）
  *   ---  /  ------              （分隔线，同一行 >=3 个连续的 -）
  *   空行分段
  */
@@ -107,18 +108,40 @@
         continue;
       }
 
-      // 标题（两层）
-      let m = line.match(/^(#{1,2})\s+(.*)$/);
+      // 标题（最多五级：# ~ #####；h3/h4/h5 视觉上仅加粗，但保持正确标签）
+      let m = line.match(/^(#{1,5})\s+(.*)$/);
       if (m) {
         closeList();
-        const level = m[1].length; // 1 或 2
-        const tag = level === 1 ? "h1" : "h2";
+        const level = m[1].length; // 1~5
+        const tag = "h" + level;
         html.push(
           "<" + tag + " class='md-h md-h" + level + "'>" +
             renderInline(m[2].trim()) +
             "</" + tag + ">"
         );
         i++;
+        continue;
+      }
+
+      // 围栏代码块：以 ```（可带语言名，如 ```js）开头，遇到单独一行的 ``` 结束
+      m = line.match(/^`{3,}\s*([^\s`]*)\s*$/);
+      if (m) {
+        closeList();
+        const lang = m[1] || "";
+        const codeLines = [];
+        i++; // 跳过起始围栏
+        while (i < lines.length && !/^`{3,}\s*$/.test(lines[i])) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        i++; // 跳过结束围栏（若存在）
+        const codeHtml = escapeHtml(codeLines.join("\n"));
+        const langTag = lang
+          ? "<div class='md-pre__lang'>" + escapeHtml(lang) + "</div>"
+          : "";
+        html.push(
+          "<pre class='md-pre'>" + langTag + "<code>" + codeHtml + "</code></pre>"
+        );
         continue;
       }
 
@@ -155,7 +178,8 @@
       const para = [line];
       i++;
       while (i < lines.length && !/^\s*$/.test(lines[i]) &&
-             !/^(#{1,2})\s+/.test(lines[i]) &&
+             !/^(#{1,5})\s+/.test(lines[i]) &&
+             !/^`{3,}\s*$/.test(lines[i]) &&
              !/^>\s?/.test(lines[i]) &&
              !/^\s*[-*]\s+/.test(lines[i]) &&
              !/^\s*-{3,}\s*$/.test(lines[i])) {

@@ -215,9 +215,9 @@ class ComponentTextareaContainer {
         if (!p) return;
         p.cells[i] = val;
         JSON_STORAGE.setPanel(self.title, p);
-        // 同步隐藏编辑框的值：放大视图保存的内容若不写回 edit，
-        // 再次双击进入编辑时会显示旧值，甚至被后续 exitEdit 覆盖丢失
-        edit.value = val;
+        // 同步格子编辑框，避免放大视图保存后 textarea 仍残留旧值，
+        // 再次进入编辑时显示旧内容、失焦时甚至会把旧值写回存储
+        if (edit.value !== val) edit.value = val;
         render.innerHTML = val ? Markdown.render(val) : "";
         render.classList.toggle("is-empty", !val);
         EventBus.emit("cell:change", { panel: self.title, index: i });
@@ -230,12 +230,11 @@ class ComponentTextareaContainer {
       cell.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const currentVal = edit.value;
         ContextMenu.show(e.clientX, e.clientY, [
           {
             label: "放大查看",
             icon: ICONS.view,
-            action: () => openZoomView(currentVal, (val) => saveCell(val)),
+            action: () => openZoomView(edit.value, (val) => saveCell(val)),
           },
         ]);
       });
