@@ -6,29 +6,64 @@
  *   POST   {baseUrl}?token=XXX   上传覆盖
  *   GET    {baseUrl}?token=XXX   下载读取（无数据 404）
  *
- * 同步地址和令牌在设置面板中配置，保存在 localStorage，不会上传到服务器。
+ * 同步地址和令牌在设置面板中配置，保存在 cookie（不会被浏览器表单自动填充篡改），
+ * 同时回写 localStorage 作为兜底（本地 file:// 打开时 cookie 可能不可用），不会上传到服务器。
  */
 const CLOUD_SYNC_DEFAULT_URL = "https://dancehole.cn/api/littletext/sync/";
 
 const CloudSync = (() => {
+  // localStorage 兜底 key（历史数据 / file:// 场景）
   const K_URL = "cloudSyncUrl";
   const K_TOKEN = "cloudSyncToken";
   const K_AUTO = "cloudSyncAuto";
+  // cookie key（主存储，避开 autofill）
+  const C_URL = "lt_sync_url";
+  const C_TOKEN = "lt_sync_token";
+  const C_AUTO = "lt_sync_auto";
 
-  /** 读取配置 */
+  function cookieGet(name) {
+    try {
+      return COOKIE.get(name);
+    } catch (e) {
+      return null;
+    }
+  }
+  function cookieSet(name, value) {
+    try {
+      COOKIE.set(name, value);
+    } catch (e) {
+      /* cookie 不可用时忽略，交由 localStorage 兜底 */
+    }
+  }
+
+  /** 读取配置：优先 cookie，回退 localStorage（兼容历史数据与 file://） */
   function getConfig() {
+    const url = cookieGet(C_URL) ?? localStorage.getItem(K_URL);
+    const token = cookieGet(C_TOKEN) ?? localStorage.getItem(K_TOKEN);
+    const autoRaw = cookieGet(C_AUTO) ?? localStorage.getItem(K_AUTO);
     return {
-      url: (localStorage.getItem(K_URL) || CLOUD_SYNC_DEFAULT_URL).trim(),
-      token: localStorage.getItem(K_TOKEN) || "",
-      auto: localStorage.getItem(K_AUTO) === "1",
+      url: (url || CLOUD_SYNC_DEFAULT_URL).trim(),
+      token: token || "",
+      auto: autoRaw === "1",
     };
   }
 
-  /** 写入配置（仅传入的字段会被更新） */
+  /** 写入配置（仅传入的字段会被更新）：cookie 与 localStorage 双写 */
   function setConfig({ url, token, auto } = {}) {
-    if (url !== undefined) localStorage.setItem(K_URL, url.trim());
-    if (token !== undefined) localStorage.setItem(K_TOKEN, token);
-    if (auto !== undefined) localStorage.setItem(K_AUTO, auto ? "1" : "0");
+    if (url !== undefined) {
+      const v = url.trim();
+      cookieSet(C_URL, v);
+      localStorage.setItem(K_URL, v);
+    }
+    if (token !== undefined) {
+      cookieSet(C_TOKEN, token);
+      localStorage.setItem(K_TOKEN, token);
+    }
+    if (auto !== undefined) {
+      const v = auto ? "1" : "0";
+      cookieSet(C_AUTO, v);
+      localStorage.setItem(K_AUTO, v);
+    }
   }
 
   /** 组装带 token 的请求地址 */

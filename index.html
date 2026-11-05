@@ -137,11 +137,11 @@
             <div class="sync-hint">在云端保留一份数据副本（单人使用，覆盖式保存）</div>
             <div class="field">
               <label class="field__label" for="sync-url">同步地址</label>
-              <input class="input" id="sync-url" type="text" placeholder="https://dancehole.cn/api/littletext/sync" />
+              <input class="input" id="sync-url" type="text" placeholder="https://dancehole.cn/api/littletext/sync" autocomplete="off" spellcheck="false" />
             </div>
             <div class="field">
               <label class="field__label" for="sync-token">同步令牌</label>
-              <input class="input" id="sync-token" type="password" placeholder="自定义一段密钥，前后端需一致" autocomplete="off" />
+              <input class="input" id="sync-token" type="password" placeholder="自定义一段密钥，前后端需一致" autocomplete="new-password" spellcheck="false" />
             </div>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:var(--space-4);">
               <button class="btn btn--ghost" id="sync-save-config" style="flex:1;">保存同步配置</button>
@@ -168,6 +168,7 @@
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
     <script src="js/tools/utils.js"></script>
+    <script src="js/tools/cookie.js"></script>
     <script src="js/systems/jsonStorage.js"></script>
     <script src="js/systems/markdown.js"></script>
     <script src="js/service/globalData.js"></script>

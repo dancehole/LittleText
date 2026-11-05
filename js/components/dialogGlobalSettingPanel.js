@@ -30,6 +30,13 @@ const GLOBAL_SETTINGS_PANEL = (() => {
     syncSaveConfigBtn = document.getElementById("sync-save-config");
     syncConfigSaved = document.getElementById("sync-config-saved");
 
+    // —— 防 Edge / Chrome 表单自动填充篡改 ——
+    // 1) HTML 已设置 autocomplete="off"(地址) / "new-password"(令牌)
+    // 2) 这里再给两个输入框随机 name，使浏览器无法匹配任何已保存的填充项
+    const rand = Math.random().toString(36).slice(2, 10);
+    syncUrlInput.setAttribute("name", "lt_sync_url_" + rand);
+    syncTokenInput.setAttribute("name", "lt_sync_token_" + rand);
+
     lockState.textContent = GLOBAL_DATA.lock ? "开启" : "关闭";
     if (GLOBAL_DATA.lock) lockBar.classList.add("is-on");
 
